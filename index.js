@@ -1,59 +1,47 @@
-const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
-const qrcode = require('qrcode-terminal');
-const http = require('http');
-
-// Server HTTP per mantenere attivo il Web Service su Render
-http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot WhatsApp Online!');
-}).listen(process.env.PORT || 3000);
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 
 async function startBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info');
+    // Gestione della sessione
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: false
+        printQRInTerminal: false // Deseleziona il QR Code ASCII
     });
 
-    sock.ev.on('creds.update', saveCreds);
+    // Se non è ancora collegato a WhatsApp, richiede il Pairing Code
+    if (!sock.authState.creds.registered) {
+        // ⚠️ INSERISCI IL TUO NUMERO CON PREFISSO (es. 393123456789 per l'Italia)
+        const phoneNumber = "393505980684"; 
 
+        setTimeout(async () => {
+            try {
+                const code = await sock.requestPairingCode(phoneNumber);
+                console.log("\n=================================");
+                console.log(`IL TUO CODICE WHATSAPP È: ${code}`);
+                console.log("=================================\n");
+            } catch (error) {
+                console.error("Errore nella richiesta del codice:", error);
+            }
+        }, 5000);
+    }
+
+    // Gestione degli eventi di connessione
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) {
-            console.log('--- SCANSIONA QUESTO CODICE QR ---');
-            qrcode.generate(qr, { small: true });
-        }
-
-        if (connection === 'open') {
-            console.log('🤖 Bot WhatsApp pronto e attivo!');
-        } else if (connection === 'close') {
-            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            if (shouldReconnect) startBot();
+        const { connection, lastDisconnect } = update;
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            console.log('Connessione chiusa. Riconnessione in corso...', shouldReconnect);
+            if (shouldReconnect) {
+                startBot();
+            }
+        } else if (connection === 'open') {
+            console.log('✅ Bot connesso con successo a WhatsApp!');
         }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages, type }) => {
-        if (type !== 'notify') return;
-        
-        for (const msg of messages) {
-            if (!msg.message || msg.key.fromMe) continue;
-
-            const from = msg.key.remoteJid;
-            const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase();
-
-            if (text === '!dado') {
-                const numero = Math.floor(Math.random() * 6) + 1;
-                await sock.sendMessage(from, { text: `🎲 Hai lanciato un **${numero}**!` });
-            }
-
-            if (text === '!moneta') {
-                const risultato = Math.random() < 0.5 ? '🪙 TESTA!' : '🪙 CROCE!';
-                await sock.sendMessage(from, { text: risultato });
-            }
-        }
-    });
+    // Salva le credenziali aggiornate
+    sock.ev.on('creds.update', saveCreds);
 }
 
 startBot();
