@@ -16,7 +16,6 @@ async function startBot() {
         printQRInTerminal: false
     });
 
-
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (update) => {
@@ -31,7 +30,6 @@ async function startBot() {
             console.log('🤖 Bot WhatsApp pronto e attivo!');
         } else if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
-            console.log('Connessione chiusa. Riconnessione:', shouldReconnect);
             if (shouldReconnect) startBot();
         }
     });
@@ -45,13 +43,11 @@ async function startBot() {
             const from = msg.key.remoteJid;
             const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || '').toLowerCase();
 
-            // COMANDO: Dado
             if (text === '!dado') {
                 const numero = Math.floor(Math.random() * 6) + 1;
                 await sock.sendMessage(from, { text: `🎲 Hai lanciato un **${numero}**!` });
             }
 
-            // COMANDO: Moneta
             if (text === '!moneta') {
                 const risultato = Math.random() < 0.5 ? '🪙 TESTA!' : '🪙 CROCE!';
                 await sock.sendMessage(from, { text: risultato });
