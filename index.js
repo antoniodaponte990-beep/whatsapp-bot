@@ -1,17 +1,23 @@
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const fs = require('fs');
 
 async function startBot() {
-    // Gestione della sessione
-    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    // 🧹 Pulisce automaticamente la sessione vecchia all'avvio per evitare errori
+    const sessionDir = 'auth_info_baileys';
+    if (fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+        console.log("🧹 Vecchia sessione pulita con successo!");
+    }
+
+    const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
 
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: false // Deseleziona il QR Code ASCII
+        printQRInTerminal: false
     });
 
-    // Se non è ancora collegato a WhatsApp, richiede il Pairing Code
     if (!sock.authState.creds.registered) {
-        // ⚠️ INSERISCI IL TUO NUMERO CON PREFISSO (es. 393123456789 per l'Italia)
+        // ⚠️ Inserisci qui il tuo numero con prefisso (es. 39 per l'Italia), senza il +
         const phoneNumber = "393505980684"; 
 
         setTimeout(async () => {
@@ -26,12 +32,10 @@ async function startBot() {
         }, 5000);
     }
 
-    // Gestione degli eventi di connessione
     sock.ev.on('connection.update', (update) => {
         const { connection, lastDisconnect } = update;
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Connessione chiusa. Riconnessione in corso...', shouldReconnect);
             if (shouldReconnect) {
                 startBot();
             }
@@ -40,7 +44,6 @@ async function startBot() {
         }
     });
 
-    // Salva le credenziali aggiornate
     sock.ev.on('creds.update', saveCreds);
 }
 
